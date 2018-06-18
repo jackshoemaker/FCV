@@ -9,7 +9,7 @@
  * ---------------------------------------- */
 
 %macro AlphaFCV(DSN=0,LIB=,MEM=,TOP=28,
-    NUMFMT=comma12.,PCTFMT=percent8.1,VVN=NORMAL);
+    CHARFMT=$CHAR80.,NUMFMT=comma12.,PCTFMT=percent8.1,VVN=NORMAL);
 
     %put MHN-NOTE:  Now running AlphaFCV v3.7;
 
@@ -99,7 +99,7 @@
 
         proc report data = peek missing;
             columns value rows pct ( 'Cumulative' cumrows cumpct );
-            define value / format=$60. 'Field Contents';
+            define value / format=&CHARFMT. 'Field Contents';
             define rows / format=&NUMFMT. 'Occurs';
             define pct / format=&PCTFMT. 'Percent';
             define cumrows / format=&NUMFMT. 'Rows';
