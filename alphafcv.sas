@@ -1,17 +1,16 @@
 /* $Id:$ */
 /* ----------------------------------------
- * AlphaFCV.sas (003)
+ * AlphaFCV
  *
  *   Performs field-content analysis on
  *   all character fields in a SAS data
  *   object.  Works on data sets and views.
  *
  * ---------------------------------------- */
-
 %macro AlphaFCV(DSN=0,LIB=,MEM=,TOP=28,
-    CHARFMT=$CHAR80.,NUMFMT=comma12.,PCTFMT=percent8.1,VVN=NORMAL);
+    COLFMT=$CHAR80.,NUMFMT=comma12.,PCTFMT=percent8.1,VVN=NORMAL);
 
-    %put MHN-NOTE:  Now running AlphaFCV v3.7;
+    %put MHN-NOTE:  Now running AlphaFCV v3.8;
 
     %local _N i DENOM TNAM;
 
@@ -37,12 +36,7 @@
     quit;
     run;
 
-    data _null_;
-        if 0 then set alpha nobs = nobs;
-        call symputx( 'NOBS', nobs );
-    run;
-
-    %if &NOBS. = 0 %then %return;
+    %if &SYSNOBS. = 0 %then %return;
 
     proc sort data = alpha;
         by name;
@@ -50,47 +44,40 @@
 
     data _null_;
         set alpha end = lastrec;
-        length NS $ 5;
-        NS = left( put( _n_, 5. ) );
         %if "&VVN." = "ANY" %then %do;
-            call symputx( '_V' || trim( NS ), "'" || trim( name ) || "'n" );
+            call symputx( catt( '_V', _n_ ), catt( "'", name, "'n" );
             %end;
         %else %do;
-            call symputx( '_V' || trim( NS ), trim( name ) );
+            call symputx( catt( '_V', _n_ ), trim( name ) );
             %end;
-        if label ^= "" then call symputx( '_L' || trim( NS ), trim(name) || ' [' || trim( label ) || ']' );
-        else call symputx( '_L' || trim( NS ), name );
-        call symputx( '_F' || trim( NS ), format );
-        if lastrec then call symputx( '_N', trim( NS ) );
+        if not( missing( label ) | ( trim( label ) = trim( name ) ) ) then
+            call symputx( catt( '_L', _n_ ), catt( name, ' [', label, ']' ) );
+        else
+            call symputx( catt( '_L', _n_ ), trim( name ) );
+        if lastrec then call symputx( '_N', left( put( _n_, 5. ) ) );
     run;
 
     proc sql noprint;
         select count( * ) into :DENOM
         from &TNAM.
             ;
+    quit;
 
     %do i = 1 %to &_N;
-        /*create view &&_V&i as*/
-        create view _&i as
+        proc sql;
+        create table peek as
             select &&_V&i as value, count( * ) as rows
             from &TNAM.
             group by &&_V&i
-            order by rows desc, value
             ;
-    %end;
+        quit;
 
-    quit;
-    run;
+        proc sort data = peek;
+            by descending rows value;
+        run;
 
-    data _null_;
-        call symputx( 'PRETTY', trim( left( put( &DENOM., &NUMFMT. ) ) ) );
-        stop;
-    run;
-
-    %do i = 1 %to &_N;
         data peek;
-            /*set &&_V&i.;*/
-            set _&i.;
+            set peek;
             pct = rows / &DENOM.;
             cumpct + pct;
             cumrows + rows;
@@ -99,26 +86,21 @@
 
         proc report data = peek missing;
             columns value rows pct ( 'Cumulative' cumrows cumpct );
-            define value / format=&CHARFMT. 'Field Contents';
+            define value / format=&COLFMT. 'Field Contents';
             define rows / format=&NUMFMT. 'Occurs';
             define pct / format=&PCTFMT. 'Percent';
             define cumrows / format=&NUMFMT. 'Rows';
             define cumpct / format=&PCTFMT. 'Percent';
             title2 "Field Under Analysis: &&_L&i.";
-            title3 "Total rows in [&TNAM.]: &PRETTY..";
+            title3 "Total rows in [&TNAM.]: %sysfunc( int( &DENOM. ), &NUMFMT. )";
         run;
 
         %end;
 
     proc datasets nolist;
-        delete peek alpha / mt=data;
-        delete
-            %do i = 1 %to &_N.;
-               _&i.
-            %end;
-             / mt=view;
+        delete peek alpha
+            / mt = data;
     quit;
     run;
-
 %mend AlphaFCV;
 /* EOF Jack N Shoemaker (JShoemaker@texturehealth.com) */
