@@ -6,10 +6,10 @@ proc format;
     value ty 1 = 'NUM' 2 = 'CHAR';
 run;
 
-%macro DoIt(METHOD=COUNT,VLIST=);
+%macro DoIt(METHOD=COUNT);
     %local C TOKEN;
     %let C = 1;
-    %let TOKEN = %scan( &VLIST., &C., ' ' );
+    %let TOKEN = %scan( &V., &C., ' ' );
     %do %while( &TOKEN. ^= );
         %if "&METHOD." = "COUNT" %then %do;
             %if &C. > 1 %then ,;
@@ -23,25 +23,25 @@ run;
             output;
             %end;
         %let C = %eval( &C. + 1 );
-        %let TOKEN = %scan( &VLIST., &C., ' ' );
+        %let TOKEN = %scan( &V., &C., ' ' );
         %end;
 %mend DoIt;
 
-%macro miss_report(TABLE_NAME=,INLIB=,LABEL=NO);
+%macro miss_report(MEM=,LIB=,REPORT=,LABEL=NO);
 
     proc sql noprint;
-        select count(*) into :DBMS_OBS from &INLIB..&TABLE_NAME.;
+        select count(*) into :DBMS_OBS from &LIB..&MEM.;
         %if &DBMS_OBS = 0 %then %return;
         select name into :V separated by ' ' from dictionary.columns
-            where upcase( libname ) = %upcase( "&INLIB." ) & upcase( memname ) = upcase( "&TABLE_NAME." );
-        create table CardinalityRatio as select %DoIt(VLIST=&V.) from &INLIB..&TABLE_NAME.;
+            where upcase( libname ) = %upcase("&LIB.") & upcase( memname ) = %upcase("&MEM.");
+        create table CardinalityRatio as select %DoIt from &LIB..&MEM.;
     quit;
 
     ods listing close;
     ods output onewayfreqs = tables( keep = table f_: frequency percent );
     run;
 
-    proc freq data = &INLIB..&TABLE_NAME.;
+    proc freq data = &LIB..&MEM.;
         tables _all_ / missing;
         format _numeric_ nm. _character_ $ch.;
     run;
@@ -50,7 +50,7 @@ run;
     ods listing;
     run;
 
-    proc contents data = &INLIB..&TABLE_NAME. noprint
+    proc contents data = &LIB..&MEM. noprint
         out = labels( keep = name label type rename =( name = ColumnName ) index = ( ColumnName ) );
     run;
 
@@ -107,7 +107,7 @@ run;
             CardinalityRatio comma16.2
             ;
         set CardinalityRatio;
-        %DoIt(METHOD=ASSIGN,VLIST=&V.);
+        %DoIt(METHOD=ASSIGN);
     run;
 
     proc sort data = report;
@@ -121,8 +121,10 @@ run;
         merge report CardinalityRatio;
         by ColumnName;
     run;
-
-    title1 "Missing values report with cardinality ratios for [&INLIB..&TABLE_NAME.]";
+    ods pdf notoc style = mhn file = "&REPORT.";
+    proc contents data = &LIB..&MEM.;
+    run;
+    title2 "Missing values report with cardinality ratios";
     proc print data = report label noobs;
         %if %upcase( &LABEL. ) ^= NO & &LABEL_EXIST. ^= 0 %then %do;
             id ColumnName label type;
@@ -133,7 +135,7 @@ run;
             var miss p_miss ok p_ok Levels CardinalityRatio;
             %end;
     run;
-
+    ods pdf close;
     proc datasets nolist;
         delete report tables CardinalityRatio;
     quit;
