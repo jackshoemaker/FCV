@@ -7,13 +7,12 @@
  *   object.  Works on data sets and views.
  *
  * ---------------------------------------- */
-
 %macro NumerFCV(DSN=0,LIB=,MEM=,NZ=N,
     NUMFMT=best12.,DATEFMT=yymmdd10.,DTFMT=datetime9.,VVN=NORMAL);
 
     %local _N i TNAM;
 
-    %put MHN-NOTE:  Now running NumerFCV v3.7;
+    %put MHN-NOTE:  Now running NumerFCV v3.8;
 
     %if "&DSN." = "0" %then %do;
         %let LIB = %upcase( &LIB );
@@ -35,14 +34,8 @@
             upcase( memname ) = upcase( "&MEM." )
             ;
     quit;
-    run;
 
-    data _null_;
-        if 0 then set numer nobs = nobs;
-        call symputx( 'NOBS', nobs );
-    run;
-
-    %if &NOBS. = 0 %then %return;
+    %if &SYSNOBS. = 0 %then %return;
 
     proc sort data = numer;
         by name;
@@ -50,24 +43,22 @@
 
     data _null_;
         set numer end = lastrec;
-        length NS $ 5;
-        NS = left( put( _n_, 5. ) );
         %if "&VVN." = "ANY" %then %do;
-            call symputx( '_V' || trim( NS ), "'" || trim( name ) || "'n" );
+            call symputx( catt( '_V', _n_ ), catt( "'", name, "'n" ) );
             %end;
         %else %do;
-            call symputx( '_V' || trim( NS ), trim( name ) );
+            call symputx( catt( '_V', _n_ ), trim( name ) );
             %end;
-        if label ^= "" then call symputx( '_L' || trim( NS ), label );
-        else call symputx( '_L' || trim( NS ), name );
-        call symputx( '_F' || trim( NS ), format );
-        if lastrec then call symputx( '_N', trim( NS ) );
+        if not( missing( label ) ) then call symputx( catt( '_L', _n_ ), trim( label ) );
+        else call symputx( catt( '_L', _n_ ), trim( name ) );
+        call symputx( catt( '_F', _n_ ), trim( format ) );
+        if lastrec then call symputx( '_N', left( put( _n_, 5. ) ) );
     run;
 
     %do i = 1 %to &_N;
         proc univariate data = &TNAM. noprint;
-            %if %upcase( &NZ ) = Y %then %do;
-                where &&_V&i > .;
+            %if %upcase( "&NZ." ) = "Y" %then %do;
+                where not( missing( &&_V&i ) );
                 %end;
             var &&_V&i;
             output out = stats
@@ -89,7 +80,7 @@
 
     data report datevar dtvar;
         set report;
-        if prxmatch( '/TIME/', format ) > 0 then output dtvar;
+        if prxmatch( '/TIME|MDY/', format ) > 0 then output dtvar;
         else if prxmatch( '/DATE|YY|QQ|MON/', format ) > 0 then output datevar;
         else output report;
     run;
